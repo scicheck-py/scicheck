@@ -1,30 +1,63 @@
-import inspect
 
-#####
-# Error Messages
-#####
+from __future__ import annotations
 
+import typing
 
-def caller(k: int) -> str:
-    "Gets the name of the calling function at the kth index in the stack"
-    return inspect.stack()[k].function
+from scicheck import _message
 
-
-def context(input: str, stack: int = 1) -> str:
-    "Returns an informative name for an input that failed a debugging check"
-
-    if function is None:
-        function = caller(stack)
-    return f"In the call to scicheck.{function}, the {input} input"
+if typing.TYPE_CHECKING:
+    from typing import Any, Callable, Optional
+    from scicheck.errors import NotTypeError, CannotConvertToType
 
 
-def strlist(strings: list[str]) -> str:
-    "Returns a nicely formatted string list"
-
-    if len(strings) == 1:
-        return strings[0]
-    elif len(strings) == 2:
-        return f"{strings[0]} or {strings[1]}"
+def astuple(input: Any) -> tuple:
+    if isinstance(input, tuple):
+        return input
+    elif isinstance(input, list):
+        return tuple(input)
     else:
-        head = ", ".join(strings[:-1])
-        return ", or ".join([head, strings[-1]])
+        return (input,)
+
+
+
+
+
+def check_type(
+    input: Any, 
+    types: type | tuple[type], 
+    name: str, 
+    description: str | None,
+    strict: bool,
+    NotTypeError: Optional[NotTypeError] = None,
+    CannotConvertToType: Optional[CannotConvertToType] = None,
+):
+    "Generalized type checker. Optionally allows type coercion"
+    
+    # Strict type checking
+    types = astuple(types)
+    if isinstance(input, types):
+        return input
+    elif strict:
+        message = _message.not_type(name, types, description)
+        raise NotTypeError(message)
+
+    # Attempt type conversion
+    converter = types[0]
+    return convert(input, converter, name, description, CannotConvertToType)
+
+
+def convert(
+    input: Any, 
+    converter: Callable, 
+    name: str, 
+    description: str, 
+    CannotConvertToType: CannotConvertToType
+) -> Any:
+    "Attempts to convert an object to a specific type"
+
+    try:
+        return converter(input)
+    except Exception as error:
+        message = _message.cannot_convert(name, description)
+        raise CannotConvertToType(message) from error
+
