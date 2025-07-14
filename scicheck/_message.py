@@ -1,5 +1,9 @@
 
 
+#####
+# Utilities
+#####
+
 
 def strlist(strings: list[str]) -> str:
     "Returns a nicely formatted string list"
@@ -12,9 +16,13 @@ def strlist(strings: list[str]) -> str:
         head = ", ".join(strings[:-1])
         return ", or ".join([head, strings[-1]])
 
-
 def message(name: str, info: str) -> str:
     return f"{name} {info}"
+
+
+#####
+# Type
+#####
 
 def _description(description: str) -> str:
     if not description.startswith(('a ', 'an ')):
@@ -25,12 +33,16 @@ def cannot_convert(name: str, description: str) -> str:
     description = _description(description)
     return f"{name} cannot be converted to {description}"
 
-def not_type(name: str, types: tuple[type], description: str) -> str:
+def not_type(name: str, description: str, types: tuple[type] = None) -> str:
     if description is None:
         description = strlist([type.__name__ for type in types])
     description = _description(description)
     return f"{name} must be {description}"
 
+
+#####
+# Path
+#####
 
 def _path(path, message):
     return f"{message}\nPath: {path}"
@@ -53,3 +65,15 @@ def not_empty(name, path):
     return _path(path, message)
     
 
+#####
+# Numeric
+#####
+
+def not_integer(input, name):
+    return f"{name} ({input}) is not an integer"
+
+def cannot_convert_complex(input, name, description):
+    return f"{name} {input} is complex-valued, so cannot be converted to {description}"
+
+def cannot_be(name, description):
+    return f"{name} cannot be {description}"

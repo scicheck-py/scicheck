@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import typing
 from math import isinf, isnan
+from operator import lt, le, gt, ge
 
 from scicheck.utils import convert
+from scicheck import _message
 from scicheck.errors import (
     CannotConvertToComplex,
     CannotConvertToFloat,
@@ -18,13 +20,21 @@ from scicheck.errors import (
     NotIntError,
     NotNumericError,
     NotRealError,
+    NotLess,
+    NotLessEqual,
+    NotGreater,
+    NotGreaterEqual,
+    NotPositive,
+    NotNegative,
+    NotPositiveOrZero,
+    NotNegativeOrZero,
 )
 
 if typing.TYPE_CHECKING:
-    from typing import Any
+    from typing import Any, Callable
     Real = int | float
     Numeric = Real | complex
-
+    from scicheck.errors import ComparisonError, CannotConvertToType
 
 # Aliases for overshadowed built-in types
 float_ = float
@@ -41,24 +51,27 @@ def _float_as_int(input: float_, name: str) -> int:
     if input.is_integer():
         return int(input)
     else:
-        raise CannotConvertToInt(f"{name} ({input}) is not an integer")
+        message = _message.not_integer(input, name)
+        raise CannotConvertToInt(message)
     
 
-def _complex_as_float(input: complex_, name: str, description: str, error: Exception) -> float_:
+def _complex_as_float(
+    input: complex_, 
+    name: str, 
+    description: str, 
+    CannotConvertError: CannotConvertToType,
+) -> float_:
     "Converts a complex to a float when possible"
 
     if input.imag == 0:
         return input.real
     else:
-        value = f"({input})" if input.real==0 else input
-        raise error(
-            f"{name} {value} is complex-valued, so cannot be converted to {description}"
-        )
-    
+        message = _message.cannot_convert_complex(input, name, description)
+        raise CannotConvertError(message)
 
 
 def _not_numeric(name: str) -> NotNumericError:
-    message = f"{name} must be a numeric type"
+    message = _message.not_type(name, 'numeric type')
     return NotNumericError(message)
 
 
@@ -68,12 +81,6 @@ def _not_numeric(name: str) -> NotNumericError:
 #####
 # Type
 #####
-
-
-
-
-
-
 
 def numeric(input: Any, name: str = 'input', *, strict: bool = False) -> Numeric:
     "Checks that an input represents a numeric type"
@@ -85,14 +92,16 @@ def numeric(input: Any, name: str = 'input', *, strict: bool = False) -> Numeric
         raise _not_numeric(name)
     
     # Attempt conversion
-    input = convert(input, complex_, name, 'a numeric type', CannotConvertToNumeric)
-    if input.image == 0:
+    input = convert(
+        input, complex_, name, 'numeric type', CannotConvertToNumeric
+    )
+
+    # Simplify type as appropriate
+    if input.imag == 0:
         input = input.real
     if input.is_integer():
         input = int(input)
     return input
-
-
 
 def complex(
     input: Any, 
@@ -102,17 +111,22 @@ def complex(
     numeric_only: bool = True
 ) -> complex_:
 
+    # Strict
     if isinstance(input, complex_):
         return input
     elif strict:
-        raise NotComplexError(f"{name} must be a complex")
+        message = _message.not_type(name, 'complex')
+        raise NotComplexError(message)
+    
+    # Convert other numeric types
     elif isinstance(input, (int, float_)):
         return complex_(input)
+    
+    # Require numeric or attempt type conversion
     elif numeric_only:
         raise _not_numeric(name)
     else:
-        return convert(input, complex_, name, 'a complex', CannotConvertToComplex)
-
+        return convert(input, complex_, name, 'complex', CannotConvertToComplex)
 
 
 def float(
@@ -127,7 +141,8 @@ def float(
     if isinstance(input, float_):
         return input
     elif strict:
-        raise NotFloatError(f"{name} must be a float")
+        message = _message.not_type(name, 'float')
+        raise NotFloatError(message)
     
     # Handle complex and int types
     elif isinstance(input, complex_):
@@ -141,8 +156,6 @@ def float(
     else:
         return convert(input, float_, name, 'a float', CannotConvertToFloat)
     
-
-
 
 def integer(
     input: Any, 
@@ -171,7 +184,6 @@ def integer(
         return convert(input, int, name, 'an integer', CannotConvertToInt)
     
     
-
 def real(
     input: Any, 
     name: str = 'input', 
@@ -186,7 +198,8 @@ def real(
     if isinstance(input, int):
         return input
     elif strict and not isinstance(input, float_):
-        raise NotRealError(f"{name} must be an int or float")
+        message = _message.not_type(name, 'an int or float')
+        raise NotRealError(message)
     
     # Handle complex
     elif isinstance(input, complex_):
@@ -202,9 +215,11 @@ def real(
 
     # Optionally prevent NaN and Inf
     if isnan(input) and not allow_nan:
-        raise IsNaNError(f"{name} cannot be NaN")
+        message = _message.cannot_be(name, 'NaN')
+        raise IsNaNError(message)
     elif isinf(input) and not allow_inf:
-        raise IsInfError(f"{name} cannot be Inf")
+        message = _message.cannot_be(name, 'Inf')
+        raise IsInfError(message)
     return input
 
 
@@ -212,25 +227,31 @@ def real(
 # # Comparison operators
 # #####
 
-# def _operator(op: Callable):
-#     "Returns the description and error associated with different operators"
+def _operator(op: Callable):
+    "Returns the description and error associated with different operators"
 
-#     if op == lt:
-#         return 'less than', NotLess
-#     elif op == le:
-#         return 'less than or equal to', NotLessEqual
-#     elif op == gt:
-#         return 'greater than', NotGreater
-#     elif op == ge:
-#         return 'greater than or equal to', NotGreaterEqual
+    if op == lt:
+        return 'less than', NotLess
+    elif op == le:
+        return 'less than or equal to', NotLessEqual
+    elif op == gt:
+        return 'greater than', NotGreater
+    elif op == ge:
+        return 'greater than or equal to', NotGreaterEqual
 
 
 
-# def _compare(input: Real, op: Callable, X: Real, name: str) -> None:
+def _compare(
+    input: Real, 
+    isvalid: Callable, 
+    X: Real, 
+    name: str, 
+    ComparisonError: ComparisonError,
+) -> None:
 
-#     if not op(input, X):
-#         description, error = _operator(op)
-#         raise error(input, description, X, name)
+    if not op(input, X):
+        description, error = _operator(op)
+        raise error(input, description, X, name)
 
 
 # def less(input: Real, X: Real, name: str = 'input') -> None:

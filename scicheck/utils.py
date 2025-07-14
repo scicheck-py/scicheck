@@ -38,7 +38,7 @@ def check_type(
     if isinstance(input, types):
         return input
     elif strict:
-        message = _message.not_type(name, types, description)
+        message = _message.not_type(name, description, types)
         raise NotTypeError(message)
 
     # Attempt type conversion
